@@ -42,8 +42,23 @@ app.post("/save", (req, res) => {
   });
 });
 
+// --- Endpoint per login admin ---
+app.post("/login", (req, res) => {
+  const { password } = req.body;
+
+  // Puoi cambiare la password qui 👇
+  const ADMIN_PASS = process.env.ADMIN_PASS || "admin123";
+
+  if (password === ADMIN_PASS) {
+    res.json({ success: true });
+  } else {
+    res.json({ success: false, message: "Password errata" });
+  }
+});
+
 // --- Avvio server ---
 app.listen(PORT, () => {
   console.log(`✅ Backend attivo su http://localhost:${PORT}`);
 });
+
 
