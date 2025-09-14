@@ -1,64 +1,63 @@
 const express = require("express");
-const fs = require("fs");
-const path = require("path");
 const cors = require("cors");
+const { Pool } = require("pg");
 
 const app = express();
-const PORT = process.env.PORT || 10000; // Render usa una porta dinamica
-
-const DATA_FILE = path.join(__dirname, "dati.json");
+const PORT = process.env.PORT || 10000;
 
 app.use(cors());
 app.use(express.json());
 
-// --- Endpoint per caricare i dati ---
-app.get("/load", (req, res) => {
-  if (!fs.existsSync(DATA_FILE)) {
-    return res.json([]); // se il file non esiste restituisce array vuoto
+// Connessione al database Supabase/Postgres
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
+// GET: carica i dati
+app.get("/load", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT content FROM archive_data LIMIT 1");
+    if (result.rows.length > 0) {
+      res.json(result.rows[0].content);
+    } else {
+      res.json([]);
+    }
+  } catch (err) {
+    console.error("Errore caricamento dati:", err);
+    res.status(500).json({ error: "Errore nel caricamento" });
   }
-  fs.readFile(DATA_FILE, "utf8", (err, data) => {
-    if (err) {
-      console.error("Errore lettura dati.json:", err);
-      return res.status(500).json({ error: "Errore lettura dati" });
-    }
-    try {
-      res.json(JSON.parse(data));
-    } catch (e) {
-      console.error("Errore parsing JSON:", e);
-      res.json([]); // se il file è corrotto, restituisce array vuoto
-    }
-  });
 });
 
-// --- Endpoint per salvare i dati ---
-app.post("/save", (req, res) => {
-  const body = req.body;
-  fs.writeFile(DATA_FILE, JSON.stringify(body, null, 2), (err) => {
-    if (err) {
-      console.error("Errore scrittura dati.json:", err);
-      return res.status(500).json({ error: "Errore salvataggio dati" });
-    }
-    res.json({ message: "Dati salvati con successo" });
-  });
+// POST: salva i dati
+app.post("/save", async (req, res) => {
+  const content = req.body;
+  try {
+    // manteniamo sempre un solo record
+    await pool.query("DELETE FROM archive_data");
+    await pool.query("INSERT INTO archive_data (content) VALUES ($1)", [content]);
+
+    res.json({ message: "✅ Dati salvati correttamente" });
+  } catch (err) {
+    console.error("Errore salvataggio dati:", err);
+    res.status(500).json({ error: "Errore nel salvataggio" });
+  }
 });
 
-// --- Endpoint per login admin ---
+// (Opzionale) login centralizzato lato backend
 app.post("/login", (req, res) => {
   const { password } = req.body;
-
-  // Puoi cambiare la password qui 👇
-  const ADMIN_PASS = process.env.ADMIN_PASS || "admin123";
-
-  if (password === ADMIN_PASS) {
+  if (password === process.env.ADMIN_PASSWORD) {
     res.json({ success: true });
   } else {
-    res.json({ success: false, message: "Password errata" });
+    res.json({ success: false });
   }
 });
 
-// --- Avvio server ---
 app.listen(PORT, () => {
   console.log(`✅ Backend attivo su http://localhost:${PORT}`);
 });
+
+
 
 
