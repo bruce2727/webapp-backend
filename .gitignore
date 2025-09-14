@@ -1,4 +1,10 @@
+# Node.js
 node_modules/
-.env
-.dati.json
 npm-debug.log
+yarn-error.log
+
+# Dati locali (non versionare su GitHub)
+dati.json
+
+# Ambiente / configurazioni locali
+.env
