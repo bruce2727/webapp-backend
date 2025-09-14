@@ -6,46 +6,51 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🔑 Variabili da Render
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
+// Variabili d'ambiente (su Render le hai già impostate)
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
 
-// Connessione a Supabase
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+// Crea client Supabase
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-// 📥 Carica i dati da Supabase
+// --- ENDPOINTS ---
+
+// Carica i dati
 app.get("/load", async (req, res) => {
   try {
     const { data, error } = await supabase
       .from("archive_data")
       .select("content")
+      .limit(1)
       .single();
 
-    if (error) throw error;
+    if (error && error.code !== "PGRST116") throw error; // PGRST116 = no rows found
 
     res.json(data ? data.content : []);
   } catch (err) {
-    console.error("Errore nel caricamento:", err.message);
-    res.json([]);
+    console.error("Errore /load:", err);
+    res.status(500).json({ error: "Errore caricamento dati" });
   }
 });
 
-// 📤 Salva i dati su Supabase
+// Salva i dati
 app.post("/save", async (req, res) => {
   try {
-    const payload = req.body;
+    const content = req.body;
 
-    // Sovrascrive il contenuto (manteniamo una sola riga nella tabella)
+    // elimina la riga esistente e inserisci quella nuova
+    await supabase.from("archive_data").delete().neq("id", 0);
+
     const { error } = await supabase
       .from("archive_data")
-      .upsert({ id: 1, content: payload });
+      .insert([{ content }]);
 
     if (error) throw error;
 
     res.json({ message: "Dati salvati con successo" });
   } catch (err) {
-    console.error("Errore nel salvataggio:", err.message);
-    res.status(500).json({ message: "Errore nel salvataggio" });
+    console.error("Errore /save:", err);
+    res.status(500).json({ error: "Errore salvataggio dati" });
   }
 });
 
