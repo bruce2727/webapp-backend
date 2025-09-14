@@ -1,62 +1,57 @@
 const express = require("express");
-const cors = require("cors");
+const bodyParser = require("body-parser");
 const { Pool } = require("pg");
+const cors = require("cors");
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+// Middleware
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
 
-// Connessione al database Supabase/Postgres
+// Connessione a Supabase Postgres tramite variabile di ambiente
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// GET: carica i dati
+// Endpoint per caricare i dati (recupera l'ultima riga salvata)
 app.get("/load", async (req, res) => {
   try {
-    const result = await pool.query("SELECT content FROM archive_data LIMIT 1");
+    const result = await pool.query(
+      "SELECT data FROM archive_data ORDER BY created_at DESC LIMIT 1"
+    );
     if (result.rows.length > 0) {
-      res.json(result.rows[0].content);
+      res.json(result.rows[0].data);
     } else {
-      res.json([]);
+      res.json([]); // nessun dato ancora salvato
     }
   } catch (err) {
     console.error("Errore caricamento dati:", err);
-    res.status(500).json({ error: "Errore nel caricamento" });
+    res.status(500).json({ error: "Errore nel caricamento dei dati" });
   }
 });
 
-// POST: salva i dati
+// Endpoint per salvare i dati (inserisce una nuova riga)
 app.post("/save", async (req, res) => {
-  const content = req.body;
   try {
-    // manteniamo sempre un solo record
-    await pool.query("DELETE FROM archive_data");
-    await pool.query("INSERT INTO archive_data (content) VALUES ($1)", [content]);
-
-    res.json({ message: "✅ Dati salvati correttamente" });
+    const newData = req.body;
+    await pool.query("INSERT INTO archive_data (data) VALUES ($1)", [
+      newData
+    ]);
+    res.json({ message: "Dati salvati con successo" });
   } catch (err) {
     console.error("Errore salvataggio dati:", err);
-    res.status(500).json({ error: "Errore nel salvataggio" });
+    res.status(500).json({ error: "Errore nel salvataggio dei dati" });
   }
 });
 
-// (Opzionale) login centralizzato lato backend
-app.post("/login", (req, res) => {
-  const { password } = req.body;
-  if (password === process.env.ADMIN_PASSWORD) {
-    res.json({ success: true });
-  } else {
-    res.json({ success: false });
-  }
-});
-
+// Avvio server
 app.listen(PORT, () => {
   console.log(`✅ Backend attivo su http://localhost:${PORT}`);
 });
+
 
 
 
