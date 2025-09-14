@@ -1,49 +1,67 @@
+// index.js
 import express from "express";
 import cors from "cors";
-import pkg from "pg";
-
-const { Pool } = pkg;
+import { createClient } from "@supabase/supabase-js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+// Leggi variabili da Render (già impostate nel dashboard)
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
 
-// GET dati
+if (!supabaseUrl || !supabaseKey) {
+  console.error("❌ ERRORE: SUPABASE_URL o SUPABASE_KEY non sono definite.");
+  process.exit(1);
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// === ENDPOINT: Carica dati ===
 app.get("/load", async (req, res) => {
   try {
-    const result = await pool.query("SELECT data FROM archive_data LIMIT 1");
-    if (result.rows.length === 0) {
-      return res.json([]);
+    const { data, error } = await supabase
+      .from("archive_data")
+      .select("data")
+      .limit(1)
+      .single();
+
+    if (error && error.code !== "PGRST116") {
+      console.error("Errore load:", error);
+      return res.status(500).json({ error: "Errore caricamento dati" });
     }
-    res.json(result.rows[0].data);
+
+    res.json(data ? data.data : []); // se non ci sono righe, restituisci []
   } catch (err) {
     console.error("Errore /load:", err);
-    res.status(500).json({ error: "Errore caricamento dati" });
+    res.status(500).json({ error: "Errore interno server" });
   }
 });
 
-// POST salvataggio
+// === ENDPOINT: Salva dati ===
 app.post("/save", async (req, res) => {
+  const payload = req.body;
+
   try {
-    const newData = req.body;
-    await pool.query(`
-      INSERT INTO archive_data (id, data)
-      VALUES (1, $1)
-      ON CONFLICT (id)
-      DO UPDATE SET data = $1;
-    `, [newData]);
+    // Sovrascrivi sempre l'unica riga della tabella
+    const { error } = await supabase
+      .from("archive_data")
+      .upsert({ id: 1, data: payload });
+
+    if (error) {
+      console.error("Errore save:", error);
+      return res.status(500).json({ error: "Errore salvataggio dati" });
+    }
+
     res.json({ message: "Dati salvati con successo" });
   } catch (err) {
     console.error("Errore /save:", err);
-    res.status(500).json({ error: "Errore salvataggio dati" });
+    res.status(500).json({ error: "Errore interno server" });
   }
 });
 
+// === AVVIO SERVER ===
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`✅ Backend attivo su http://localhost:${PORT}`);
