@@ -4,41 +4,46 @@ const path = require("path");
 const cors = require("cors");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000; // Render usa una porta dinamica
+
 const DATA_FILE = path.join(__dirname, "dati.json");
 
-// Middleware
 app.use(cors());
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json());
 
-// --- Rotta per caricare i dati ---
+// --- Endpoint per caricare i dati ---
 app.get("/load", (req, res) => {
   if (!fs.existsSync(DATA_FILE)) {
-    return res.json([]); // se il file non esiste, restituisce array vuoto
+    return res.json([]); // se il file non esiste restituisce array vuoto
   }
-
-  try {
-    const raw = fs.readFileSync(DATA_FILE, "utf8");
-    const json = JSON.parse(raw);
-    res.json(json);
-  } catch (err) {
-    console.error("Errore lettura dati:", err);
-    res.status(500).json({ error: "Errore nel caricamento dati" });
-  }
+  fs.readFile(DATA_FILE, "utf8", (err, data) => {
+    if (err) {
+      console.error("Errore lettura dati.json:", err);
+      return res.status(500).json({ error: "Errore lettura dati" });
+    }
+    try {
+      res.json(JSON.parse(data));
+    } catch (e) {
+      console.error("Errore parsing JSON:", e);
+      res.json([]); // se il file è corrotto, restituisce array vuoto
+    }
+  });
 });
 
-// --- Rotta per salvare i dati ---
+// --- Endpoint per salvare i dati ---
 app.post("/save", (req, res) => {
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(req.body, null, 2));
+  const body = req.body;
+  fs.writeFile(DATA_FILE, JSON.stringify(body, null, 2), (err) => {
+    if (err) {
+      console.error("Errore scrittura dati.json:", err);
+      return res.status(500).json({ error: "Errore salvataggio dati" });
+    }
     res.json({ message: "Dati salvati con successo" });
-  } catch (err) {
-    console.error("Errore salvataggio dati:", err);
-    res.status(500).json({ error: "Errore nel salvataggio dati" });
-  }
+  });
 });
 
 // --- Avvio server ---
 app.listen(PORT, () => {
   console.log(`✅ Backend attivo su http://localhost:${PORT}`);
 });
+
