@@ -1,52 +1,42 @@
-const express = require("express");
-const cors = require("cors");
-const { createClient } = require("@supabase/supabase-js");
+import express from "express";
+import cors from "cors";
+import pkg from "pg";
+
+const { Pool } = pkg;
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Variabili d'ambiente (su Render le hai già impostate)
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
-// Crea client Supabase
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-// --- ENDPOINTS ---
-
-// Carica i dati
+// GET dati
 app.get("/load", async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from("archive_data")
-      .select("content")
-      .limit(1)
-      .single();
-
-    if (error && error.code !== "PGRST116") throw error; // PGRST116 = no rows found
-
-    res.json(data ? data.content : []);
+    const result = await pool.query("SELECT data FROM archive_data LIMIT 1");
+    if (result.rows.length === 0) {
+      return res.json([]);
+    }
+    res.json(result.rows[0].data);
   } catch (err) {
     console.error("Errore /load:", err);
     res.status(500).json({ error: "Errore caricamento dati" });
   }
 });
 
-// Salva i dati
+// POST salvataggio
 app.post("/save", async (req, res) => {
   try {
-    const content = req.body;
-
-    // elimina la riga esistente e inserisci quella nuova
-    await supabase.from("archive_data").delete().neq("id", 0);
-
-    const { error } = await supabase
-      .from("archive_data")
-      .insert([{ content }]);
-
-    if (error) throw error;
-
+    const newData = req.body;
+    await pool.query(`
+      INSERT INTO archive_data (id, data)
+      VALUES (1, $1)
+      ON CONFLICT (id)
+      DO UPDATE SET data = $1;
+    `, [newData]);
     res.json({ message: "Dati salvati con successo" });
   } catch (err) {
     console.error("Errore /save:", err);
@@ -54,7 +44,6 @@ app.post("/save", async (req, res) => {
   }
 });
 
-// Avvio server
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`✅ Backend attivo su http://localhost:${PORT}`);
