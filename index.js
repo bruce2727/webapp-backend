@@ -1,46 +1,51 @@
-// index.js
 const express = require("express");
-const bodyParser = require("body-parser");
-const { Pool } = require("pg");
+const cors = require("cors");
+const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
-app.use(bodyParser.json());
+app.use(cors());
+app.use(express.json());
 
-// Connessione al database PostgreSQL (Render → Environment Variables)
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+// 🔑 Variabili da Render
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
-// Test connessione
-pool.connect()
-  .then(() => console.log("✅ Connessione al database riuscita"))
-  .catch(err => console.error("❌ Errore connessione DB:", err));
+// Connessione a Supabase
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Endpoint per caricare i dati
+// 📥 Carica i dati da Supabase
 app.get("/load", async (req, res) => {
   try {
-    const result = await pool.query("SELECT data FROM archive_data ORDER BY id DESC LIMIT 1");
-    if (result.rows.length > 0) {
-      res.json(result.rows[0].data);
-    } else {
-      res.json([]);
-    }
+    const { data, error } = await supabase
+      .from("archive_data")
+      .select("content")
+      .single();
+
+    if (error) throw error;
+
+    res.json(data ? data.content : []);
   } catch (err) {
-    console.error("Errore caricamento:", err);
-    res.status(500).json({ error: "Errore nel caricamento dati" });
+    console.error("Errore nel caricamento:", err.message);
+    res.json([]);
   }
 });
 
-// Endpoint per salvare i dati
+// 📤 Salva i dati su Supabase
 app.post("/save", async (req, res) => {
   try {
-    const jsonData = req.body;
-    await pool.query("INSERT INTO archive_data (data) VALUES ($1)", [jsonData]);
+    const payload = req.body;
+
+    // Sovrascrive il contenuto (manteniamo una sola riga nella tabella)
+    const { error } = await supabase
+      .from("archive_data")
+      .upsert({ id: 1, content: payload });
+
+    if (error) throw error;
+
     res.json({ message: "Dati salvati con successo" });
   } catch (err) {
-    console.error("Errore salvataggio:", err);
-    res.status(500).json({ error: "Errore nel salvataggio dati" });
+    console.error("Errore nel salvataggio:", err.message);
+    res.status(500).json({ message: "Errore nel salvataggio" });
   }
 });
 
